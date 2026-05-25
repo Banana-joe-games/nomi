@@ -1,12 +1,1617 @@
 <!doctype html>
-<html lang="it">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BJG Booth Configurator 3D</title>
-  </head>
-  <body class="bg-gray-900 text-gray-100">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SALVAGE Playtest Simulator v0.1</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel2: #1c2128;
+    --line: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #f0883e;
+    --p1: #58a6ff;
+    --p2: #f85149;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --blue: #6e7681;
+    --good: #2ea043;
+    --warn: #d29922;
+    --bad: #f85149;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px; line-height: 1.4;
+  }
+  header {
+    padding: 8px 14px; background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { font-size: 16px; margin: 0; color: var(--accent); }
+  header .tabs { display: flex; gap: 4px; }
+  header .tab {
+    padding: 5px 12px; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 4px; cursor: pointer; color: var(--muted);
+  }
+  header .tab.active { color: var(--text); background: var(--bg); border-color: var(--accent); }
+  main { padding: 12px; }
+  .view { display: none; }
+  .view.active { display: block; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    padding: 5px 10px; border-radius: 4px; font: inherit; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: bold; }
+  input[type=number], input[type=text], select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    padding: 4px 6px; border-radius: 3px; font: inherit; width: 80px;
+  }
+  label.cfg { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+              padding: 3px 6px; border-bottom: 1px dotted var(--line); }
+  label.cfg span { color: var(--muted); }
+  .cfg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .cfg-section {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 10px;
+  }
+  .cfg-section h3 { margin: 0 0 8px 0; font-size: 13px; color: var(--accent); }
+
+  /* Play view */
+  .play-grid {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 12px;
+    align-items: start;
+  }
+  .map-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+  .map {
+    position: relative; width: 100%; aspect-ratio: 9/13;
+    background: #0a0d12; border: 1px solid var(--line); border-radius: 4px;
+    overflow: hidden;
+  }
+  .node {
+    position: absolute; transform: translate(-50%, -50%);
+    width: 38px; height: 38px; border-radius: 50%;
+    background: var(--panel2); border: 2px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--muted);
+    cursor: default; user-select: none;
+  }
+  .node.camp { width: 46px; height: 46px; border-width: 3px; background: #1c2128; }
+  .node.camp.p1 { border-color: var(--p1); color: var(--p1); }
+  .node.camp.p2 { border-color: var(--p2); color: var(--p2); }
+  .node.center { width: 44px; height: 44px; border-width: 3px; background: #1c2128; }
+  .node.center.green { border-color: var(--green); }
+  .node.center.yellow { border-color: var(--yellow); }
+  .node.center.blue { border-color: #6cb6ff; }
+  .node.center.empty { border-style: dashed; }
+  .node.junction { border-color: #58a6ff44; }
+  .node .badges {
+    position: absolute; top: -7px; right: -7px;
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .node .badge {
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 0 4px; font-size: 9px;
+    color: var(--text);
+  }
+  .node .badge.mob { color: var(--bad); border-color: var(--bad); }
+  .node .mecha {
+    position: absolute; bottom: -4px;
+    width: 12px; height: 12px; border-radius: 2px;
+    border: 1px solid #111;
+  }
+  .node .mecha.p1 { background: var(--p1); left: 30%; transform: translateX(-50%); }
+  .node .mecha.p2 { background: var(--p2); left: 70%; transform: translateX(-50%); }
+  .node.reachable { cursor: pointer; box-shadow: 0 0 0 2px var(--accent); }
+  .node.reachable:hover { background: #2a2f37; }
+  .node .cell {
+    position: absolute; top: -6px; left: -6px;
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 1.5px solid #111;
+  }
+  .node .cell.green { background: var(--green); }
+  .node .cell.yellow { background: var(--yellow); }
+  .node .cell.blue { background: #6cb6ff; }
+  svg.edges { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+  svg.edges line { stroke: #30363d; stroke-width: 1.5; }
+
+  .sidebar { display: flex; flex-direction: column; gap: 10px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .panel h3 { margin: 0 0 6px 0; font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stats-row { display: flex; justify-content: space-between; align-items: center; padding: 2px 0; }
+  .stats-row .key { color: var(--muted); }
+  .dash { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .stat { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; text-align: center; }
+  .stat .v { font-size: 16px; font-weight: bold; }
+  .stat .k { font-size: 9px; color: var(--muted); text-transform: uppercase; }
+  .stat.p1 .v { color: var(--p1); }
+  .stat.p2 .v { color: var(--p2); }
+  .basetrack { display: flex; gap: 2px; padding: 4px 0; }
+  .basetrack .pip {
+    flex: 1; height: 10px; background: var(--panel2); border: 1px solid var(--line); border-radius: 2px;
+  }
+  .basetrack .pip.hit { background: var(--bad); }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0; }
+  .log {
+    background: #07090c; border: 1px solid var(--line); border-radius: 4px;
+    height: 260px; overflow-y: auto; padding: 6px; font-size: 11px;
+  }
+  .log .entry { padding: 1px 0; border-bottom: 1px dotted #1a1f26; }
+  .log .entry.p1 { color: var(--p1); }
+  .log .entry.p2 { color: var(--p2); }
+  .log .entry.combat { color: var(--accent); }
+  .log .entry.win { color: var(--good); font-weight: bold; }
+  .log .entry.collapse { color: var(--bad); }
+  .log .entry.close { color: var(--warn); }
+  .log .entry.sys { color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--muted); padding: 6px 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .center-info { color: var(--muted); font-size: 11px; padding: 2px 0; }
+
+  /* Batch view */
+  .batch-grid { display: grid; grid-template-columns: 320px 1fr; gap: 12px; align-items: start; }
+  .batch-results { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+  .batch-results pre { margin: 0; white-space: pre-wrap; font-size: 11px; color: var(--text); }
+  .progress-wrap { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; height: 8px; margin: 8px 0; overflow: hidden; }
+  .progress-bar { background: var(--accent); height: 100%; width: 0%; transition: width 0.1s; }
+
+  .winner-banner {
+    background: linear-gradient(90deg, var(--good), var(--accent));
+    color: #111; font-weight: bold; padding: 8px 12px;
+    border-radius: 6px; text-align: center; margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>SALVAGE Playtest Simulator v0.1</h1>
+  <div class="tabs">
+    <div class="tab active" data-tab="play">Play</div>
+    <div class="tab" data-tab="batch">Batch</div>
+    <div class="tab" data-tab="config">Config</div>
+  </div>
+  <div style="flex:1"></div>
+  <div style="color:var(--muted);font-size:11px">Single-file build, no network, no storage.</div>
+</header>
+<main>
+
+<section id="view-play" class="view active">
+  <div class="play-grid">
+    <div class="map-wrap">
+      <div id="winner-banner" class="winner-banner" style="display:none"></div>
+      <div class="map" id="map"></div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--p1)"></span>P1 (You)</span>
+        <span><span class="dot" style="background:var(--p2)"></span>P2 (AI)</span>
+        <span><span class="dot" style="background:var(--green)"></span>Cell A</span>
+        <span><span class="dot" style="background:var(--yellow)"></span>Cell B</span>
+        <span><span class="dot" style="background:#6cb6ff"></span>Cell C</span>
+        <span>M=mod, d#=ammo, S#=scrap, +=sustain, !T#=mob</span>
+      </div>
+    </div>
+    <div class="sidebar">
+      <div class="panel">
+        <div class="stats-row">
+          <span class="key">Turn</span>
+          <span><span id="turn-num">0</span> &middot; Active: <span id="active-player">P1</span></span>
+        </div>
+        <div class="stats-row">
+          <span class="key">Countdown</span>
+          <span><strong id="countdown-val">24</strong></span>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>P1 (You)</h3>
+        <div class="dash">
+          <div class="stat p1"><div class="v" id="p1-fuel">6</div><div class="k">Fuel</div></div>
+          <div class="stat p1"><div class="v" id="p1-hp">4</div><div class="k">HP</div></div>
+          <div class="stat p1"><div class="v" id="p1-power">1</div><div class="k">Power</div></div>
+        </div>
+        <div class="stats-row"><span class="key">Stock</span><span id="p1-stock">d6</span></div>
+        <div class="stats-row"><span class="key">Carry</span><span id="p1-carry">-</span></div>
+        <div class="stats-row"><span class="key">Score (current)</span><span id="p1-banked">0 pts</span></div>
+        <div class="stats-row"><span class="key">Base hits</span></div>
+        <div class="basetrack" id="p1-track"></div>
+      </div>
+      <div class="panel">
+        <h3>P2 (AI)</h3>
+        <div class="dash">
+          <div class="stat p2"><div class="v" id="p2-fuel">6</div><div class="k">Fuel</div></div>
+          <div class="stat p2"><div class="v" id="p2-hp">4</div><div class="k">HP</div></div>
+          <div class="stat p2"><div class="v" id="p2-power">1</div><div class="k">Power</div></div>
+        </div>
+        <div class="stats-row"><span class="key">Stock</span><span id="p2-stock">d6</span></div>
+        <div class="stats-row"><span class="key">Carry</span><span id="p2-carry">-</span></div>
+        <div class="stats-row"><span class="key">Score (current)</span><span id="p2-banked">0 pts</span></div>
+        <div class="stats-row"><span class="key">Base hits</span></div>
+        <div class="basetrack" id="p2-track"></div>
+      </div>
+      <div class="panel">
+        <h3>Actions</h3>
+        <div class="center-info" id="center-info">Click a highlighted adjacent node to move.</div>
+        <div class="actions">
+          <button id="btn-retry" disabled>Retry mob fight</button>
+          <button id="btn-close" disabled>Close run</button>
+          <button id="btn-newgame" class="primary">New game</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="view-batch" class="view">
+  <div class="batch-grid">
+    <div class="panel">
+      <h3>Batch settings</h3>
+      <label class="cfg"><span>Games</span><input type="number" id="batch-n" value="1000" min="1" max="100000" /></label>
+      <label class="cfg"><span>Seed (0 = random)</span><input type="number" id="batch-seed" value="0" /></label>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button id="btn-run-batch" class="primary">Run batch</button>
+        <button id="btn-stop-batch" disabled>Stop</button>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar" id="batch-progress"></div></div>
+      <div id="batch-status" style="color:var(--muted);font-size:11px">Idle.</div>
+    </div>
+    <div class="batch-results">
+      <h3>Results</h3>
+      <pre id="batch-output">Run a batch to see stats here.</pre>
+    </div>
+  </div>
+</section>
+
+<section id="view-config" class="view">
+  <div class="cfg-grid" id="cfg-grid"></div>
+  <div style="margin-top:12px;display:flex;gap:8px">
+    <button id="btn-cfg-reset">Reset to defaults</button>
+    <span style="color:var(--muted);align-self:center">Changes apply to next new game / batch.</span>
+  </div>
+</section>
+
+</main>
+
+<script>
+"use strict";
+
+// ============================================================
+// DEFAULT CONFIG
+// ============================================================
+const DEFAULT_CONFIG = {
+  fuelMax: 6,
+  hpMax: 4,
+  startingPower: 1,
+  startingAmmoCount: 1,
+  startingAmmoType: "d6",
+  baseMelee: 2,
+  countdownLength: 24,
+  baseTrackLength: 6,
+  raidDamage: 1,
+  nodesPerLane: 2,
+  mobThreatMin: 3,
+  mobThreatMax: 7,
+  mobEffectFraction: 0.4,
+  // Scoring
+  scrapValueByMaterial: [1, 2, 3, 4, 5, 6],
+  diceValue: { d4: 1, d6: 1, d8: 1, d10: 2, d12: 2, d20: 4 },
+  cellValue: 5,
+  // Mod generation
+  modPowerHighChance: 0.2,
+  modValueMin: 1,
+  modValueMax: 6,
+  ammoDiceTypes: ["d4", "d6", "d8", "d10", "d12", "d20"],
+  mobEffectKinds: ["onEngageDiscard", "onEngageWeaken", "onDefeatExtra", "onDefeatLoseMod", "onWinForceMove"],
+  maxTurnsPerGame: 400,
+  // AI knobs
+  aiAggression: 0.7,
+  aiMobRiskFactor: 1.0,
+};
+
+// ============================================================
+// RNG
+// ============================================================
+function makeRNG(seed) {
+  if (!seed) seed = (Date.now() ^ (Math.random() * 0xffffffff)) | 0;
+  let s = seed >>> 0;
+  if (s === 0) s = 1;
+  return function () {
+    s = (s * 1664525 + 1013904223) | 0;
+    return ((s >>> 0) / 4294967296);
+  };
+}
+function rollDie(rng, sides) { return 1 + Math.floor(rng() * sides); }
+function rollNamed(rng, name) { return rollDie(rng, parseInt(name.slice(1), 10)); }
+function pickRandom(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+
+// ============================================================
+// GRAPH
+// ============================================================
+function buildGraph(N) {
+  const nodes = {};
+  const edges = [];
+  function addNode(id, type, lane, pos, side) {
+    nodes[id] = { id, type, lane, pos, side, contents: null, cell: null, mob: null, droppedHaul: null };
+  }
+  addNode("P1", "camp", null, 0, 1);
+  addNode("P2", "camp", null, 0, 2);
+  const lanes = ["A", "B", "C"];
+  const j1 = {}, j2 = {};
+  const cellByLane = { A: "green", B: "yellow", C: "blue" };
+  for (const lane of lanes) {
+    const j1id = `J1${lane}`;
+    const j2id = `J2${lane}`;
+    addNode(j1id, "junction", lane, 0, 1);
+    addNode(j2id, "junction", lane, 0, 2);
+    j1[lane] = j1id; j2[lane] = j2id;
+    edges.push(["P1", j1id]);
+    edges.push(["P2", j2id]);
+    const n1 = [], n2 = [];
+    for (let i = 0; i < N; i++) {
+      const id = `${lane}1.${i + 1}`;
+      addNode(id, "lane", lane, i + 1, 1);
+      n1.push(id);
+    }
+    const c = `C${lane}`;
+    addNode(c, "center", lane, 0, 0);
+    nodes[c].cell = cellByLane[lane];
+    for (let i = 0; i < N; i++) {
+      const id = `${lane}2.${i + 1}`;
+      addNode(id, "lane", lane, i + 1, 2);
+      n2.push(id);
+    }
+    const chain = [j1id, ...n1, c, ...n2, j2id];
+    for (let i = 0; i < chain.length - 1; i++) edges.push([chain[i], chain[i + 1]]);
+  }
+  edges.push([j1.A, j1.B]); edges.push([j1.B, j1.C]);
+  edges.push([j2.A, j2.B]); edges.push([j2.B, j2.C]);
+
+  const adj = {};
+  for (const id of Object.keys(nodes)) adj[id] = [];
+  for (const [a, b] of edges) { adj[a].push(b); adj[b].push(a); }
+
+  const dist = {};
+  for (const id of Object.keys(nodes)) {
+    const d = {}; d[id] = 0;
+    const q = [id];
+    while (q.length) {
+      const u = q.shift();
+      for (const v of adj[u]) {
+        if (!(v in d)) { d[v] = d[u] + 1; q.push(v); }
+      }
+    }
+    dist[id] = d;
+  }
+
+  const xLane = { A: 0.2, B: 0.5, C: 0.8 };
+  function coord(id) {
+    const n = nodes[id];
+    if (id === "P1") return { x: 0.5, y: 0.04 };
+    if (id === "P2") return { x: 0.5, y: 0.96 };
+    if (n.type === "junction") {
+      return { x: xLane[n.lane], y: n.side === 1 ? 0.13 : 0.87 };
+    }
+    if (n.type === "center") return { x: xLane[n.lane], y: 0.5 };
+    const idx = n.pos;
+    const span = 0.32;
+    const step = span / (N + 1);
+    if (n.side === 1) return { x: xLane[n.lane], y: 0.16 + step * idx };
+    return { x: xLane[n.lane], y: 0.84 - step * idx };
+  }
+  for (const id of Object.keys(nodes)) {
+    const c = coord(id);
+    nodes[id].x = c.x; nodes[id].y = c.y;
+  }
+  return { nodes, edges, adj, dist, lanes, j1, j2, camp1: "P1", camp2: "P2" };
+}
+
+// ============================================================
+// SEEDING
+// ============================================================
+function seedNode(node, rng, config) {
+  if (node.type === "camp" || node.type === "center") return;
+  node.contents = null;
+  node.mob = null;
+  node.droppedHaul = null;
+  const r = rollDie(rng, 6);
+  let kind, guarded;
+  if (r === 1) { kind = "mod"; guarded = true; }
+  else if (r === 2) { kind = "mod"; guarded = false; }
+  else if (r === 3) { kind = "ammo"; guarded = true; }
+  else if (r === 4) { kind = "ammo"; guarded = false; }
+  else if (r === 5) { kind = "scrap"; guarded = true; }
+  else { kind = "sustain"; guarded = false; }
+
+  if (kind === "mod") {
+    const power = rng() < config.modPowerHighChance ? 2 : 1;
+    const value = config.modValueMin + Math.floor(rng() * (config.modValueMax - config.modValueMin + 1));
+    node.contents = { kind: "mod", power, value };
+  } else if (kind === "ammo") {
+    const dieType = pickRandom(rng, config.ammoDiceTypes);
+    node.contents = { kind: "ammo", dieType };
+  } else if (kind === "scrap") {
+    const material = 1 + Math.floor(rng() * 6);
+    node.contents = { kind: "scrap", material };
+  } else if (kind === "sustain") {
+    const benefit = rng() < 0.5 ? "fuel" : "hp";
+    node.contents = { kind: "sustain", benefit };
+  }
+  if (guarded) {
+    const tMin = config.mobThreatMin, tMax = config.mobThreatMax;
+    const threat = tMin + Math.floor(rng() * (tMax - tMin + 1));
+    let effect = null;
+    if (rng() < config.mobEffectFraction) effect = pickRandom(rng, config.mobEffectKinds);
+    node.mob = { threat, effect };
+  }
+}
+
+function reseedHalf(state, side) {
+  for (const id of Object.keys(state.graph.nodes)) {
+    const n = state.graph.nodes[id];
+    if (n.side === side && (n.type === "junction" || n.type === "lane")) {
+      seedNode(n, state.rng, state.config);
+    }
+  }
+}
+
+// ============================================================
+// PLAYER
+// ============================================================
+function makePlayer(id, home, config) {
+  const stock = [];
+  for (let i = 0; i < config.startingAmmoCount; i++) stock.push(config.startingAmmoType);
+  return {
+    id, home, pos: home,
+    fuel: config.fuelMax, hp: config.hpMax,
+    power: config.startingPower,
+    baseMelee: config.baseMelee,
+    stock,
+    carry: { mods: [], ammo: [], scrap: [], cells: [] },
+    bankedMods: [],
+    bankedScrap: [],
+    baseHits: 0,
+    collapsed: false,
+    runGoal: null, // 'raid' | 'loot' | 'cell' set lazily, cleared on close/collapse
+  };
+}
+
+// ============================================================
+// LOGGING
+// ============================================================
+function log(state, msg, cls) {
+  state.log.push({ msg, cls: cls || "sys", turn: state.turn });
+}
+
+// ============================================================
+// MOVEMENT / RESOLUTION
+// ============================================================
+function moveCost(state, pIdx) {
+  const p = state.players[pIdx];
+  const node = state.graph.nodes[p.pos];
+  const opp = state.players[1 - pIdx];
+  if (opp.pos === p.pos || node.mob) return 2;
+  return 1;
+}
+
+function canMove(state, pIdx, toId) {
+  const p = state.players[pIdx];
+  if (p.collapsed || state.finished) return false;
+  if (!state.graph.adj[p.pos].includes(toId)) return false;
+  return p.fuel >= moveCost(state, pIdx);
+}
+
+function doMove(state, pIdx, toId) {
+  const p = state.players[pIdx];
+  const cost = moveCost(state, pIdx);
+  p.fuel -= cost;
+  p.pos = toId;
+  state.countdown -= 1;
+  log(state, `${p.id} -> ${toId} (fuel -${cost}, ${p.fuel} left, count ${state.countdown})`, p.id.toLowerCase());
+  resolveArrival(state, pIdx);
+}
+
+function resolveArrival(state, pIdx) {
+  if (state.finished) return;
+  const p = state.players[pIdx];
+  if (p.collapsed) return;
+  const node = state.graph.nodes[p.pos];
+  const opp = state.players[1 - pIdx];
+
+  if (opp.pos === p.pos && !opp.collapsed) {
+    pvpFight(state, pIdx);
+    if (state.finished) return;
+    if (p.collapsed || opp.collapsed) return;
+  }
+  if (node.type === "center" && node.cell) {
+    p.carry.cells.push(node.cell);
+    log(state, `${p.id} picks up ${node.cell} cell at ${node.id}`, p.id.toLowerCase());
+    node.cell = null;
+    if (p.carry.cells.length >= 3) {
+      state.stats.held3cellsEver[pIdx] = true;
+      finishGame(state, pIdx, "cells");
+      return;
+    }
+  }
+  if (node.droppedHaul) {
+    takeDroppedHaul(state, pIdx, node);
+  }
+  if (node.mob && node.contents) {
+    engageMob(state, pIdx);
+    return;
+  }
+  if (node.contents) {
+    takeLoot(state, pIdx, node);
+  }
+}
+
+function takeDroppedHaul(state, pIdx, node) {
+  const p = state.players[pIdx];
+  const dh = node.droppedHaul;
+  if (!dh) return;
+  const total = (dh.mods.length || 0) + (dh.ammo.length || 0) + (dh.scrap.length || 0);
+  if (!total) { node.droppedHaul = null; return; }
+  for (const m of dh.mods) p.carry.mods.push(m);
+  for (const a of dh.ammo) p.carry.ammo.push(a);
+  for (const s of dh.scrap) p.carry.scrap.push(s);
+  log(state, `${p.id} collects dropped haul (${dh.mods.length}m/${dh.ammo.length}a/${dh.scrap.length}s)`, p.id.toLowerCase());
+  node.droppedHaul = null;
+}
+
+function takeLoot(state, pIdx, node) {
+  const p = state.players[pIdx];
+  const item = node.contents;
+  if (!item) return;
+  if (item.kind === "mod") {
+    p.carry.mods.push(item);
+    log(state, `${p.id} grabs mod (+${item.power} pow, ${item.value} pts)`, p.id.toLowerCase());
+  } else if (item.kind === "ammo") {
+    p.carry.ammo.push(item.dieType);
+    log(state, `${p.id} grabs ammo ${item.dieType}`, p.id.toLowerCase());
+  } else if (item.kind === "scrap") {
+    p.carry.scrap.push(item.material);
+    log(state, `${p.id} grabs scrap m${item.material}`, p.id.toLowerCase());
+  } else if (item.kind === "sustain") {
+    if (item.benefit === "fuel") {
+      p.fuel = Math.min(p.fuel + 1, state.config.fuelMax);
+      log(state, `${p.id} sustain: +1 fuel (now ${p.fuel})`, p.id.toLowerCase());
+    } else {
+      p.hp = Math.min(p.hp + 1, state.config.hpMax);
+      log(state, `${p.id} sustain: +1 HP (now ${p.hp})`, p.id.toLowerCase());
+    }
+  }
+  node.contents = null;
+}
+
+function pickCombatDice(stock, power) {
+  const order = { d20: 6, d12: 5, d10: 4, d8: 3, d6: 2, d4: 1 };
+  const sorted = stock.slice().sort((a, b) => (order[b] || 0) - (order[a] || 0));
+  return sorted.slice(0, power);
+}
+
+function rollSum(rng, dice) {
+  let s = 0; const rolls = [];
+  for (const d of dice) {
+    const r = rollNamed(rng, d);
+    s += r; rolls.push(`${d}=${r}`);
+  }
+  return { sum: s, rolls };
+}
+
+function removeFromStock(p, dice) {
+  for (const d of dice) {
+    const i = p.stock.indexOf(d);
+    if (i >= 0) p.stock.splice(i, 1);
+  }
+}
+
+function applyMobEngageEffect(state, p, mob) {
+  if (!mob.effect) return 0;
+  if (mob.effect === "onEngageDiscard") {
+    if (p.carry.scrap.length > 0) {
+      const lost = p.carry.scrap.pop();
+      log(state, `  mob effect: ${p.id} discards scrap m${lost}`, "combat");
+    } else if (p.carry.ammo.length > 0) {
+      const lost = p.carry.ammo.pop();
+      log(state, `  mob effect: ${p.id} discards ammo ${lost}`, "combat");
+    }
+    return 0;
+  }
+  if (mob.effect === "onEngageWeaken") {
+    log(state, `  mob effect: ${p.id} rolls 1 fewer die`, "combat");
+    return 1;
+  }
+  return 0;
+}
+
+function applyMobDefeatEffect(state, p, mob) {
+  if (!mob.effect) return;
+  if (mob.effect === "onDefeatExtra") {
+    p.hp -= 1;
+    log(state, `  mob effect: ${p.id} extra -1 HP (now ${p.hp})`, "combat");
+  } else if (mob.effect === "onDefeatLoseMod") {
+    if (p.bankedMods.length > 0) {
+      const lost = p.bankedMods.pop();
+      p.power = Math.max(state.config.startingPower, p.power - lost.power);
+      log(state, `  mob effect: ${p.id} lost mod (-${lost.power} pow, now ${p.power})`, "combat");
+    }
+  }
+}
+
+function applyMobWinEffect(state, p, mob) {
+  if (!mob.effect) return;
+  if (mob.effect === "onWinForceMove") {
+    const neighbors = state.graph.adj[p.pos];
+    if (neighbors.length === 0) return;
+    let worst = neighbors[0], worstScore = -Infinity;
+    for (const n of neighbors) {
+      const nn = state.graph.nodes[n];
+      let s = 0;
+      if (nn.mob) s += 3;
+      if (nn.side === (p.id === "P1" ? 1 : 2)) s -= 1;
+      const cellDists = [];
+      for (const cid of Object.keys(state.graph.nodes)) {
+        const cn = state.graph.nodes[cid];
+        if (cn.type === "center" && cn.cell) cellDists.push(state.graph.dist[n][cid]);
+      }
+      if (cellDists.length) s += Math.min.apply(null, cellDists) * 0.5;
+      if (s > worstScore) { worstScore = s; worst = n; }
+    }
+    p.pos = worst;
+    log(state, `  mob effect: ${p.id} forced to ${worst}`, "combat");
+  }
+}
+
+function engageMob(state, pIdx) {
+  const p = state.players[pIdx];
+  const node = state.graph.nodes[p.pos];
+  const mob = node.mob;
+  if (!mob) return;
+  const penalty = applyMobEngageEffect(state, p, mob);
+  const effectivePower = Math.max(1, p.power - penalty);
+  const dice = pickCombatDice(p.stock, effectivePower);
+  let sum, rollsDesc;
+  if (dice.length === 0) {
+    sum = p.baseMelee;
+    rollsDesc = `melee ${p.baseMelee}`;
+  } else {
+    const r = rollSum(state.rng, dice);
+    sum = r.sum;
+    rollsDesc = r.rolls.join("+");
+    removeFromStock(p, dice);
+    for (const d of dice) state.dieSupply[d] = (state.dieSupply[d] || 0) + 1;
+  }
+  log(state, `${p.id} vs mob T${mob.threat}: ${rollsDesc} = ${sum}`, "combat");
+  if (sum >= mob.threat) {
+    log(state, `${p.id} defeats mob`, "combat");
+    node.mob = null;
+    // Take the loot the mob was guarding BEFORE any force-move effect relocates the player.
+    if (node.contents) takeLoot(state, pIdx, node);
+    applyMobWinEffect(state, p, mob);
+  } else {
+    p.hp -= 1;
+    log(state, `${p.id} loses: -1 HP (now ${p.hp})`, "combat");
+    applyMobDefeatEffect(state, p, mob);
+    if (p.hp <= 0) collapse(state, pIdx, "mob");
+  }
+}
+
+function pvpFight(state, pIdx) {
+  const a = state.players[pIdx];
+  const b = state.players[1 - pIdx];
+  const aDice = pickCombatDice(a.stock, a.power);
+  const bDice = pickCombatDice(b.stock, b.power);
+  const aRes = aDice.length ? rollSum(state.rng, aDice) : { sum: a.baseMelee, rolls: [`melee ${a.baseMelee}`] };
+  const bRes = bDice.length ? rollSum(state.rng, bDice) : { sum: b.baseMelee, rolls: [`melee ${b.baseMelee}`] };
+  removeFromStock(a, aDice); removeFromStock(b, bDice);
+  for (const d of aDice) state.dieSupply[d] = (state.dieSupply[d] || 0) + 1;
+  for (const d of bDice) state.dieSupply[d] = (state.dieSupply[d] || 0) + 1;
+  log(state, `PvP @ ${a.pos}: ${a.id} ${aRes.rolls.join("+")}=${aRes.sum} vs ${b.id} ${bRes.rolls.join("+")}=${bRes.sum}`, "combat");
+  if (aRes.sum === bRes.sum) { log(state, `Tie - no damage`, "combat"); return; }
+  const loserIdx = aRes.sum > bRes.sum ? (1 - pIdx) : pIdx;
+  const winnerIdx = 1 - loserIdx;
+  state.players[loserIdx].hp -= 1;
+  log(state, `${state.players[winnerIdx].id} wins PvP, ${state.players[loserIdx].id} -1 HP`, "combat");
+  if (state.players[loserIdx].hp <= 0) collapse(state, loserIdx, "pvp", winnerIdx);
+}
+
+function collapse(state, pIdx, cause, winnerIdxIfPvp) {
+  const p = state.players[pIdx];
+  if (p.collapsed) return;
+  p.collapsed = true;
+  const node = state.graph.nodes[p.pos];
+  const haul = {
+    mods: p.carry.mods.slice(),
+    ammo: p.carry.ammo.slice(),
+    scrap: p.carry.scrap.slice(),
+  };
+  p.carry.mods = []; p.carry.ammo = []; p.carry.scrap = [];
+  if (!node.droppedHaul) node.droppedHaul = { mods: [], ammo: [], scrap: [] };
+  node.droppedHaul.mods.push.apply(node.droppedHaul.mods, haul.mods);
+  node.droppedHaul.ammo.push.apply(node.droppedHaul.ammo, haul.ammo);
+  node.droppedHaul.scrap.push.apply(node.droppedHaul.scrap, haul.scrap);
+  log(state, `${p.id} COLLAPSE (${cause}) at ${node.id}: drops haul`, "collapse");
+
+  if (p.carry.cells.length > 0) {
+    let droppedCell;
+    if (p.carry.cells.length >= 2) {
+      droppedCell = p.carry.cells.shift();
+    } else {
+      droppedCell = p.carry.cells.pop();
+    }
+    state.stats.cellsLooseEvents += 1;
+    if (cause === "pvp" && typeof winnerIdxIfPvp === "number") {
+      const winner = state.players[winnerIdxIfPvp];
+      winner.carry.cells.push(droppedCell);
+      state.stats.cellsStolenByPvp += 1;
+      log(state, `Cell ${droppedCell} seized by ${winner.id}`, "collapse");
+      if (winner.carry.cells.length >= 3) {
+        state.stats.held3cellsEver[winnerIdxIfPvp] = true;
+        finishGame(state, winnerIdxIfPvp, "cells");
+        return;
+      }
+    } else {
+      const homeSite = `C${droppedCell === "green" ? "A" : droppedCell === "yellow" ? "B" : "C"}`;
+      state.graph.nodes[homeSite].cell = droppedCell;
+      log(state, `Cell ${droppedCell} returns to ${homeSite}`, "collapse");
+    }
+  }
+  p.pos = p.home;
+  p.fuel = state.config.fuelMax;
+  p.hp = state.config.hpMax;
+  p.collapsed = false;
+  p.runGoal = null;
+  log(state, `${p.id} retreats home, refuel/repair`, "collapse");
+}
+
+function closeRun(state, pIdx, raid) {
+  const p = state.players[pIdx];
+  const oppIdx = 1 - pIdx;
+  for (const m of p.carry.mods) {
+    p.bankedMods.push(m);
+    p.power += m.power;
+  }
+  p.carry.mods = [];
+  for (const a of p.carry.ammo) p.stock.push(a);
+  p.carry.ammo = [];
+  for (const s of p.carry.scrap) p.bankedScrap.push(s);
+  p.carry.scrap = [];
+  p.pos = p.home;
+  p.fuel = state.config.fuelMax;
+  p.hp = state.config.hpMax;
+  p.runGoal = null;
+  log(state, `${p.id} closes run -> home, banks (pow now ${p.power}, stock ${p.stock.length} dice)`, "close");
+  if (raid) {
+    state.players[oppIdx].baseHits += state.config.raidDamage;
+    log(state, `${p.id} RAIDS ${state.players[oppIdx].id} base (${state.players[oppIdx].baseHits}/${state.config.baseTrackLength})`, "close");
+    state.stats.raidsByPlayer[pIdx] += 1;
+    if (state.players[oppIdx].baseHits >= state.config.baseTrackLength) {
+      finishGame(state, pIdx, "raid");
+      return;
+    }
+  }
+  reseedHalf(state, pIdx === 0 ? 1 : 2);
+}
+
+// ============================================================
+// SCORING
+// ============================================================
+function diceTier(d) {
+  if (d === "d20") return 4;
+  if (d === "d10" || d === "d12") return 2;
+  return 1;
+}
+function scoreOf(state, pIdx) {
+  const p = state.players[pIdx];
+  let s = 0;
+  for (const m of p.bankedMods) s += m.value;
+  for (const m of p.carry.mods) s += m.value;
+  for (const sc of p.bankedScrap) s += state.config.scrapValueByMaterial[sc - 1] || 0;
+  for (const sc of p.carry.scrap) s += state.config.scrapValueByMaterial[sc - 1] || 0;
+  for (const d of p.stock) s += diceTier(d);
+  for (const d of p.carry.ammo) s += diceTier(d);
+  s += p.carry.cells.length * state.config.cellValue;
+  return s;
+}
+
+function finishGame(state, winnerIdx, winType) {
+  if (state.finished) return;
+  state.finished = true;
+  state.winner = winnerIdx === undefined ? null : winnerIdx;
+  state.winType = winType;
+  const wid = state.winner === null ? "Draw" : state.players[state.winner].id;
+  log(state, `GAME OVER - winner: ${wid} (${winType})`, "win");
+}
+
+function endByCount(state) {
+  const s0 = scoreOf(state, 0);
+  const s1 = scoreOf(state, 1);
+  if (s0 > s1) finishGame(state, 0, "count");
+  else if (s1 > s0) finishGame(state, 1, "count");
+  else finishGame(state, null, "draw");
+}
+
+// ============================================================
+// GAME SETUP
+// ============================================================
+function newGame(config, seed) {
+  const rng = makeRNG(seed || 0);
+  const graph = buildGraph(config.nodesPerLane);
+  for (const id of Object.keys(graph.nodes)) seedNode(graph.nodes[id], rng, config);
+  const players = [
+    makePlayer("P1", graph.camp1, config),
+    makePlayer("P2", graph.camp2, config),
+  ];
+  return {
+    config, rng, graph, players,
+    countdown: config.countdownLength,
+    log: [],
+    turn: 0,
+    activePlayer: 0,
+    winner: null, winType: null,
+    finished: false,
+    dieSupply: { d4: 12, d6: 12, d8: 12, d10: 12, d12: 12, d20: 6 },
+    stats: {
+      cellsStolenByPvp: 0,
+      cellsLooseEvents: 0,
+      raidsByPlayer: [0, 0],
+      held3cellsEver: [false, false],
+    },
+    awaitingRetry: [false, false],
+  };
+}
+
+// ============================================================
+// AI HEURISTIC
+// ============================================================
+function expectedSum(dice) {
+  let s = 0;
+  for (const d of dice) s += (parseInt(d.slice(1), 10) + 1) / 2;
+  return s;
+}
+
+function nearestCellSites(state) {
+  const sites = [];
+  for (const id of Object.keys(state.graph.nodes)) {
+    const n = state.graph.nodes[id];
+    if (n.type === "center" && n.cell) sites.push(id);
+  }
+  return sites;
+}
+
+function carriedValue(state, pIdx) {
+  const p = state.players[pIdx];
+  let v = 0;
+  for (const m of p.carry.mods) v += m.value + m.power * 1.5;
+  for (const s of p.carry.scrap) v += state.config.scrapValueByMaterial[s - 1] || 0;
+  for (const a of p.carry.ammo) v += diceTier(a);
+  v += p.carry.cells.length * state.config.cellValue * 1.5;
+  return v;
+}
+
+function nearestCloseTarget(state, pIdx) {
+  const p = state.players[pIdx];
+  const enemyCamp = pIdx === 0 ? "P2" : "P1";
+  const candidates = [];
+  for (const id of Object.keys(state.graph.nodes)) {
+    const n = state.graph.nodes[id];
+    if (n.type === "center" || id === enemyCamp) {
+      candidates.push({ id, d: state.graph.dist[p.pos][id] });
+    }
+  }
+  candidates.sort((a, b) => a.d - b.d);
+  return candidates[0];
+}
+
+function evaluateNode(state, pIdx, nodeId) {
+  const n = state.graph.nodes[nodeId];
+  const p = state.players[pIdx];
+  let v = 0;
+  if (n.type === "center" && n.cell) v += state.config.cellValue * 3;
+  if (n.contents) {
+    if (n.contents.kind === "mod") v += n.contents.value + n.contents.power * 1.5;
+    else if (n.contents.kind === "scrap") v += state.config.scrapValueByMaterial[n.contents.material - 1];
+    else if (n.contents.kind === "ammo") v += diceTier(n.contents.dieType) + 0.5;
+    else if (n.contents.kind === "sustain") {
+      if (n.contents.benefit === "fuel" && p.fuel < state.config.fuelMax) v += 2;
+      if (n.contents.benefit === "hp" && p.hp < state.config.hpMax) v += 2;
+    }
+  }
+  if (n.mob) {
+    const dice = pickCombatDice(p.stock, p.power);
+    const expected = dice.length ? expectedSum(dice) : p.baseMelee;
+    const margin = expected - n.mob.threat;
+    const risk = state.config.aiMobRiskFactor;
+    if (margin >= 3) v -= 0.5 * risk;
+    else if (margin >= 0) v -= 1.5 * risk;
+    else v -= (4 + (n.mob.threat - expected) * 1.2) * risk;
+  }
+  if (n.droppedHaul) {
+    v += (n.droppedHaul.mods.length || 0) * 3
+       + (n.droppedHaul.scrap.length || 0) * 2
+       + (n.droppedHaul.ammo.length || 0) * 1;
+  }
+  return v;
+}
+
+function bestNeighbor(state, pIdx, options) {
+  let best = options[0], bestV = -Infinity;
+  for (const o of options) {
+    const v = evaluateNode(state, pIdx, o);
+    if (v > bestV) { bestV = v; best = o; }
+  }
+  return best;
+}
+
+function stepToward(state, pIdx, targetId) {
+  const p = state.players[pIdx];
+  if (p.pos === targetId) return null;
+  const dist = state.graph.dist[p.pos][targetId];
+  if (dist === undefined || dist === Infinity) return null;
+  let best = null, bestV = -Infinity;
+  for (const n of state.graph.adj[p.pos]) {
+    if (state.graph.dist[n][targetId] === dist - 1) {
+      const v = evaluateNode(state, pIdx, n);
+      if (v > bestV) { bestV = v; best = n; }
+    }
+  }
+  return best;
+}
+
+function shouldClose(state, pIdx) {
+  const p = state.players[pIdx];
+  const node = state.graph.nodes[p.pos];
+  // Enemy camp -> always close (raid)
+  if (node.id === (pIdx === 0 ? "P2" : "P1")) return true;
+  // Carrying cells: keep hunting for more if reachable
+  if (p.carry.cells.length >= 1 && p.carry.cells.length < 3) {
+    const sites = nearestCellSites(state);
+    if (sites.length > 0 && p.hp > 1) {
+      const d = Math.min.apply(null, sites.map(s => state.graph.dist[p.pos][s]));
+      if (d <= p.fuel - 1) return false;
+    }
+    return true;
+  }
+  // No cells: at center site, optionally push for raid
+  if (node.type === "center" && p.carry.cells.length === 0) {
+    const enemyCamp = pIdx === 0 ? "P2" : "P1";
+    const dToEnemy = state.graph.dist[p.pos][enemyCamp];
+    // If we have enough fuel & HP, sometimes push past center to raid
+    if (p.fuel >= dToEnemy + 1 && p.hp > 1 && state.rng() < state.config.aiAggression) {
+      return false;
+    }
+  }
+  const cv = carriedValue(state, pIdx);
+  if (cv >= 5) return true;
+  if (p.fuel <= 2 || p.hp <= 1) return true;
+  return false;
+}
+
+function pickHighValueTargetForCellCarry(state, pIdx) {
+  const p = state.players[pIdx];
+  if (p.carry.cells.length >= 1) {
+    const sites = nearestCellSites(state);
+    if (sites.length > 0 && p.hp > 1) {
+      sites.sort((a, b) => state.graph.dist[p.pos][a] - state.graph.dist[p.pos][b]);
+      if (state.graph.dist[p.pos][sites[0]] <= p.fuel - 1) return sites[0];
+    }
+  }
+  const ct = nearestCloseTarget(state, pIdx);
+  return ct ? ct.id : (pIdx === 0 ? state.graph.camp1 : state.graph.camp2);
+}
+
+function pickRunGoal(state, pIdx) {
+  const p = state.players[pIdx];
+  const enemyCamp = pIdx === 0 ? "P2" : "P1";
+  const cells = nearestCellSites(state);
+  const minCellDist = cells.length
+    ? Math.min.apply(null, cells.map(s => state.graph.dist[p.home][s]))
+    : Infinity;
+  const dHomeToEnemy = state.graph.dist[p.home][enemyCamp];
+  const cellReachable = minCellDist <= state.config.fuelMax - 1;
+  const raidReachable = dHomeToEnemy <= state.config.fuelMax - 1;
+  const r = state.rng();
+  if (raidReachable && r < state.config.aiAggression * 0.4) return "raid";
+  if (cellReachable && p.carry.cells.length === 0) return "cell";
+  return "loot";
+}
+
+function aiChooseAction(state, pIdx) {
+  const p = state.players[pIdx];
+  if (state.finished || p.collapsed) return { type: "skip" };
+  const node = state.graph.nodes[p.pos];
+  if (!p.runGoal && p.pos === p.home) p.runGoal = pickRunGoal(state, pIdx);
+
+  // Stuck on guarded node after a failed engage?
+  if (node.mob && state.awaitingRetry[pIdx]) {
+    const dice = pickCombatDice(p.stock, p.power);
+    const exp = dice.length ? expectedSum(dice) : p.baseMelee;
+    if (exp + 1 >= node.mob.threat && p.hp > 1) return { type: "retry" };
+    const opts = state.graph.adj[p.pos].filter(() => p.fuel >= 2);
+    if (opts.length) return { type: "move", to: bestNeighbor(state, pIdx, opts) };
+    return { type: "retry" };
+  }
+
+  // Close if standing on a close-target and conditions favorable
+  const enemyCamp = pIdx === 0 ? "P2" : "P1";
+  const isClose = (node.type === "center") || (node.id === enemyCamp);
+  // Raid goal: don't close at center if we can still reach enemy camp
+  let canCloseHere = isClose;
+  if (isClose && p.runGoal === "raid" && node.id !== enemyCamp) {
+    const dEnemy = state.graph.dist[p.pos][enemyCamp];
+    if (p.fuel >= dEnemy + 1 && p.hp > 1) canCloseHere = false;
+  }
+  if (canCloseHere && shouldClose(state, pIdx)) {
+    return { type: "close", raid: node.id === enemyCamp };
+  }
+
+  // Holding cells: head toward a 3rd or close
+  if (p.carry.cells.length >= 1) {
+    const target = pickHighValueTargetForCellCarry(state, pIdx);
+    const next = stepToward(state, pIdx, target);
+    if (next && canMove(state, pIdx, next)) return { type: "move", to: next };
+  }
+
+  // Enemy with 2 cells: hunt
+  const opp = state.players[1 - pIdx];
+  if (opp.carry.cells.length >= 2 && !opp.collapsed) {
+    const myExp = expectedSum(pickCombatDice(p.stock, p.power)) || p.baseMelee;
+    const oppExp = expectedSum(pickCombatDice(opp.stock, opp.power)) || opp.baseMelee;
+    if (myExp >= oppExp - 1 && p.hp > 1 && state.rng() < state.config.aiAggression) {
+      const next = stepToward(state, pIdx, opp.pos);
+      if (next && canMove(state, pIdx, next)) return { type: "move", to: next };
+    }
+  }
+
+  const moves = state.graph.adj[p.pos].filter(n => canMove(state, pIdx, n));
+  if (moves.length === 0) return { type: "skip" };
+
+  // Low fuel / HP / heavy haul -> head to nearest close target
+  const cv = carriedValue(state, pIdx);
+  const ct = nearestCloseTarget(state, pIdx);
+  if (ct && (cv >= 8 || p.fuel <= ct.d + 1 || p.hp <= 1)) {
+    const next = stepToward(state, pIdx, ct.id);
+    if (next && canMove(state, pIdx, next)) return { type: "move", to: next };
+  }
+
+  // Honor run goal
+  if (p.runGoal === "raid" && p.carry.cells.length === 0) {
+    const dEnemy = state.graph.dist[p.pos][enemyCamp];
+    if (p.fuel >= dEnemy + 1 && p.hp > 1) {
+      const next = stepToward(state, pIdx, enemyCamp);
+      if (next && canMove(state, pIdx, next)) return { type: "move", to: next };
+    }
+  } else if (p.runGoal === "cell" && p.carry.cells.length === 0) {
+    const sites = nearestCellSites(state);
+    if (sites.length > 0) {
+      sites.sort((a, b) => state.graph.dist[p.pos][a] - state.graph.dist[p.pos][b]);
+      if (state.graph.dist[p.pos][sites[0]] <= p.fuel - 1) {
+        const next = stepToward(state, pIdx, sites[0]);
+        if (next && canMove(state, pIdx, next)) return { type: "move", to: next };
+      }
+    }
+  }
+
+  // Look one step deeper: pick a 2-step target that maximises future value
+  let best = moves[0], bestV = -Infinity;
+  for (const o of moves) {
+    let v = evaluateNode(state, pIdx, o);
+    // Look-ahead bonus: best follow-up from o
+    const followups = state.graph.adj[o];
+    let bestFollow = 0;
+    for (const f of followups) {
+      if (f === p.pos) continue;
+      const fv = evaluateNode(state, pIdx, f) * 0.5;
+      if (fv > bestFollow) bestFollow = fv;
+    }
+    v += bestFollow;
+    if (v > bestV) { bestV = v; best = o; }
+  }
+  return { type: "move", to: best };
+}
+
+// ============================================================
+// TURN EXECUTION
+// ============================================================
+function applyAction(state, pIdx, action) {
+  if (state.finished) return;
+  const p = state.players[pIdx];
+  if (action.type === "move") {
+    if (!canMove(state, pIdx, action.to)) {
+      if (p.fuel <= 0) collapse(state, pIdx, "fuel");
+      return;
+    }
+    state.awaitingRetry[pIdx] = false;
+    doMove(state, pIdx, action.to);
+    const node = state.graph.nodes[p.pos];
+    if (!state.finished && node.mob && !p.collapsed) {
+      state.awaitingRetry[pIdx] = true;
+    }
+    if (!state.finished && p.carry.cells.length >= 3) state.stats.held3cellsEver[pIdx] = true;
+    if (state.countdown <= 0 && !state.finished) endByCount(state);
+  } else if (action.type === "retry") {
+    state.countdown -= 1;
+    log(state, `${p.id} retries mob fight`, p.id.toLowerCase());
+    engageMob(state, pIdx);
+    const node = state.graph.nodes[p.pos];
+    state.awaitingRetry[pIdx] = !!node.mob && !p.collapsed && !state.finished;
+    if (state.countdown <= 0 && !state.finished) endByCount(state);
+  } else if (action.type === "close") {
+    closeRun(state, pIdx, !!action.raid);
+    state.awaitingRetry[pIdx] = false;
+  } else {
+    state.countdown -= 1;
+    log(state, `${p.id} skips`, p.id.toLowerCase());
+    if (state.countdown <= 0 && !state.finished) endByCount(state);
+  }
+  if (!state.finished && p.fuel <= 0 && !p.collapsed) collapse(state, pIdx, "fuel");
+  if (!state.finished && p.carry.cells.length >= 3) {
+    state.stats.held3cellsEver[pIdx] = true;
+    finishGame(state, pIdx, "cells");
+  }
+}
+
+function runTurn(state, pIdx) {
+  if (state.finished) return;
+  const p = state.players[pIdx];
+  if (p.collapsed) return;
+  state.turn += 1;
+  const action = aiChooseAction(state, pIdx);
+  applyAction(state, pIdx, action);
+}
+
+// ============================================================
+// BATCH SIM
+// ============================================================
+function simulateOne(config, seed) {
+  const state = newGame(config, seed);
+  let safety = config.maxTurnsPerGame;
+  while (!state.finished && safety-- > 0) {
+    runTurn(state, state.activePlayer);
+    state.activePlayer = 1 - state.activePlayer;
+  }
+  const looped = !state.finished;
+  if (looped) endByCount(state);
+  return {
+    winner: state.winner,
+    winType: looped ? "loop" : state.winType,
+    turns: state.turn,
+    scores: [scoreOf(state, 0), scoreOf(state, 1)],
+    powers: [state.players[0].power, state.players[1].power],
+    cellsStolenByPvp: state.stats.cellsStolenByPvp,
+    held3cellsEver: state.stats.held3cellsEver.slice(),
+    raidsByPlayer: state.stats.raidsByPlayer.slice(),
+    looped,
+  };
+}
+
+// ============================================================
+// UI STATE
+// ============================================================
+const UI = {
+  state: null,
+  config: JSON.parse(JSON.stringify(DEFAULT_CONFIG)),
+  humanIdx: 0,
+  pendingAi: false,
+};
+
+function $(id) { return document.getElementById(id); }
+function el(tag, attrs) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k of Object.keys(attrs)) {
+    if (k === "style") Object.assign(e.style, attrs[k]);
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+    else if (k === "class") e.className = attrs[k];
+    else e.setAttribute(k, attrs[k]);
+  }
+  for (let i = 2; i < arguments.length; i++) {
+    const c = arguments[i];
+    if (c === null || c === undefined) continue;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+// Tabs
+for (const tab of document.querySelectorAll("header .tab")) {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll("header .tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    tab.classList.add("active");
+    $("view-" + tab.dataset.tab).classList.add("active");
+  });
+}
+
+// ============================================================
+// CONFIG PANEL
+// ============================================================
+const CFG_FIELDS = [
+  { sec: "Mecha", k: "fuelMax", label: "Fuel max" },
+  { sec: "Mecha", k: "hpMax", label: "HP max" },
+  { sec: "Mecha", k: "startingPower", label: "Starting POWER" },
+  { sec: "Mecha", k: "startingAmmoCount", label: "Starting ammo count" },
+  { sec: "Mecha", k: "startingAmmoType", label: "Starting ammo type", type: "select", opts: ["d4","d6","d8","d10","d12","d20"] },
+  { sec: "Mecha", k: "baseMelee", label: "Base melee" },
+  { sec: "Game", k: "countdownLength", label: "Countdown length" },
+  { sec: "Game", k: "baseTrackLength", label: "Base track length" },
+  { sec: "Game", k: "raidDamage", label: "Raid damage" },
+  { sec: "Game", k: "nodesPerLane", label: "Nodes per lane (per side)" },
+  { sec: "Mobs", k: "mobThreatMin", label: "Mob threat min" },
+  { sec: "Mobs", k: "mobThreatMax", label: "Mob threat max" },
+  { sec: "Mobs", k: "mobEffectFraction", label: "Mob effect fraction (0..1)", step: 0.05 },
+  { sec: "Scoring", k: "cellValue", label: "Cell value" },
+  { sec: "Scoring", k: "modValueMin", label: "Mod value min" },
+  { sec: "Scoring", k: "modValueMax", label: "Mod value max" },
+  { sec: "Scoring", k: "modPowerHighChance", label: "Mod +2 power chance", step: 0.05 },
+  { sec: "Batch", k: "maxTurnsPerGame", label: "Max turns/game (safety)" },
+  { sec: "AI", k: "aiAggression", label: "AI aggression (0..1)", step: 0.05 },
+  { sec: "AI", k: "aiMobRiskFactor", label: "AI mob risk factor", step: 0.1 },
+];
+
+function renderConfig() {
+  const grid = $("cfg-grid");
+  grid.innerHTML = "";
+  const order = ["Mecha", "Game", "Mobs", "Scoring", "Scrap", "Dice", "Batch", "AI"];
+  const sections = {};
+  for (const f of CFG_FIELDS) {
+    if (!sections[f.sec]) sections[f.sec] = el("div", { class: "cfg-section" }, el("h3", null, f.sec));
+    let input;
+    if (f.type === "select") {
+      input = el("select", { id: "cfg-" + f.k });
+      for (const o of f.opts) {
+        const opt = el("option", { value: o }, o);
+        if (UI.config[f.k] === o) opt.selected = true;
+        input.appendChild(opt);
+      }
+      input.addEventListener("change", () => { UI.config[f.k] = input.value; });
+    } else {
+      input = el("input", { type: "number", id: "cfg-" + f.k, value: String(UI.config[f.k]) });
+      if (f.step) input.step = f.step;
+      input.addEventListener("change", () => {
+        const v = Number(input.value);
+        UI.config[f.k] = isNaN(v) ? UI.config[f.k] : v;
+      });
+    }
+    sections[f.sec].appendChild(el("label", { class: "cfg" }, el("span", null, f.label), input));
+  }
+  const scrapSec = el("div", { class: "cfg-section" }, el("h3", null, "Scrap values (mat 1..6)"));
+  for (let i = 0; i < 6; i++) {
+    const idx = i;
+    const input = el("input", { type: "number", value: String(UI.config.scrapValueByMaterial[i]) });
+    input.addEventListener("change", () => {
+      const v = Number(input.value);
+      if (!isNaN(v)) UI.config.scrapValueByMaterial[idx] = v;
+    });
+    scrapSec.appendChild(el("label", { class: "cfg" }, el("span", null, "Mat " + (i + 1)), input));
+  }
+  sections["Scrap"] = scrapSec;
+  const diceSec = el("div", { class: "cfg-section" }, el("h3", null, "Dice values (stock score)"));
+  for (const d of ["d4","d6","d8","d10","d12","d20"]) {
+    const key = d;
+    const input = el("input", { type: "number", value: String(UI.config.diceValue[d]) });
+    input.addEventListener("change", () => {
+      const v = Number(input.value);
+      if (!isNaN(v)) UI.config.diceValue[key] = v;
+    });
+    diceSec.appendChild(el("label", { class: "cfg" }, el("span", null, d), input));
+  }
+  sections["Dice"] = diceSec;
+  for (const k of order) if (sections[k]) grid.appendChild(sections[k]);
+}
+
+$("btn-cfg-reset").addEventListener("click", () => {
+  UI.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  renderConfig();
+});
+
+// ============================================================
+// PLAY RENDER
+// ============================================================
+function renderMap() {
+  const map = $("map");
+  map.innerHTML = "";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "edges");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("preserveAspectRatio", "none");
+  for (const [a, b] of UI.state.graph.edges) {
+    const na = UI.state.graph.nodes[a];
+    const nb = UI.state.graph.nodes[b];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", String(na.x * 100));
+    line.setAttribute("y1", String(na.y * 100));
+    line.setAttribute("x2", String(nb.x * 100));
+    line.setAttribute("y2", String(nb.y * 100));
+    svg.appendChild(line);
+  }
+  map.appendChild(svg);
+
+  const p1 = UI.state.players[0];
+  const p2 = UI.state.players[1];
+  const isHumanTurn = UI.state.activePlayer === UI.humanIdx && !UI.state.finished;
+  const reachable = new Set();
+  if (isHumanTurn && !p1.collapsed && !UI.state.awaitingRetry[0]) {
+    for (const n of UI.state.graph.adj[p1.pos]) {
+      if (canMove(UI.state, UI.humanIdx, n)) reachable.add(n);
+    }
+  }
+
+  for (const id of Object.keys(UI.state.graph.nodes)) {
+    const n = UI.state.graph.nodes[id];
+    const div = el("div", { class: "node", style: { left: (n.x * 100) + "%", top: (n.y * 100) + "%" } });
+    if (n.type === "camp") {
+      div.classList.add("camp");
+      div.classList.add(id === "P1" ? "p1" : "p2");
+      div.textContent = id === "P1" ? "C1" : "C2";
+    } else if (n.type === "junction") {
+      div.classList.add("junction");
+      div.textContent = id;
+    } else if (n.type === "center") {
+      div.classList.add("center");
+      div.classList.add(n.cell ? (n.cell === "green" ? "green" : n.cell === "yellow" ? "yellow" : "blue") : "empty");
+      div.textContent = id;
+    } else {
+      div.textContent = id;
+    }
+    if (n.type === "center" && n.cell) {
+      div.appendChild(el("div", { class: "cell " + (n.cell === "green" ? "green" : n.cell === "yellow" ? "yellow" : "blue") }));
+    }
+    const badges = el("div", { class: "badges" });
+    if (n.contents) {
+      const lab = n.contents.kind === "mod" ? "M"
+        : n.contents.kind === "ammo" ? n.contents.dieType
+        : n.contents.kind === "scrap" ? ("S" + n.contents.material)
+        : "+";
+      badges.appendChild(el("div", { class: "badge" }, lab));
+    }
+    if (n.mob) badges.appendChild(el("div", { class: "badge mob" }, "!T" + n.mob.threat));
+    if (n.droppedHaul) {
+      const c = (n.droppedHaul.mods.length || 0) + (n.droppedHaul.ammo.length || 0) + (n.droppedHaul.scrap.length || 0);
+      if (c > 0) badges.appendChild(el("div", { class: "badge" }, "drop:" + c));
+    }
+    div.appendChild(badges);
+    if (p1.pos === id && !p1.collapsed) div.appendChild(el("div", { class: "mecha p1" }));
+    if (p2.pos === id && !p2.collapsed) div.appendChild(el("div", { class: "mecha p2" }));
+    if (reachable.has(id)) {
+      div.classList.add("reachable");
+      const target = id;
+      div.addEventListener("click", () => humanMove(target));
+    }
+    map.appendChild(div);
+  }
+}
+
+function renderDashboards() {
+  const s = UI.state;
+  $("turn-num").textContent = String(s.turn);
+  $("active-player").textContent = s.players[s.activePlayer].id;
+  $("countdown-val").textContent = String(s.countdown);
+  for (let i = 0; i < 2; i++) {
+    const p = s.players[i];
+    const pre = i === 0 ? "p1" : "p2";
+    $(pre + "-fuel").textContent = String(p.fuel);
+    $(pre + "-hp").textContent = String(p.hp);
+    $(pre + "-power").textContent = String(p.power);
+    const stockCount = {};
+    for (const d of p.stock) stockCount[d] = (stockCount[d] || 0) + 1;
+    $(pre + "-stock").textContent =
+      Object.keys(stockCount).length ? Object.entries(stockCount).map(([k, v]) => `${k}x${v}`).join(" ") : "(none)";
+    const carry = [];
+    if (p.carry.mods.length) carry.push(`${p.carry.mods.length} mod`);
+    if (p.carry.ammo.length) carry.push(`${p.carry.ammo.length} ammo`);
+    if (p.carry.scrap.length) carry.push(`${p.carry.scrap.length} scrap`);
+    if (p.carry.cells.length) carry.push(`${p.carry.cells.length} cell${p.carry.cells.length > 1 ? "s" : ""}`);
+    $(pre + "-carry").textContent = carry.length ? carry.join(", ") : "-";
+    $(pre + "-banked").textContent = scoreOf(s, i) + " pts";
+    const track = $(pre + "-track");
+    track.innerHTML = "";
+    for (let k = 0; k < UI.config.baseTrackLength; k++) {
+      track.appendChild(el("div", { class: "pip" + (k < p.baseHits ? " hit" : "") }));
+    }
+  }
+  const p1 = s.players[0];
+  const node = s.graph.nodes[p1.pos];
+  const isHumanTurn = s.activePlayer === UI.humanIdx && !s.finished;
+  $("btn-retry").disabled = !(isHumanTurn && node.mob && UI.state.awaitingRetry[0]);
+  const onClose = (node.type === "center") || (node.id === "P2");
+  $("btn-close").disabled = !(isHumanTurn && onClose);
+  const wb = $("winner-banner");
+  if (s.finished) {
+    const w = s.winner === null ? "Draw" : s.players[s.winner].id;
+    wb.style.display = "block";
+    wb.textContent = `WIN: ${w} (${s.winType})  -  P1 ${scoreOf(s,0)} pts vs P2 ${scoreOf(s,1)} pts`;
+  } else {
+    wb.style.display = "none";
+  }
+  if (s.finished) $("center-info").textContent = "Game over. Click New game.";
+  else if (isHumanTurn) {
+    if (UI.state.awaitingRetry[0]) $("center-info").textContent = "Mob still blocks the loot. Retry or move away (costs 2 fuel).";
+    else if (onClose) $("center-info").textContent = "You're at a close-point. Move on, or close your run.";
+    else $("center-info").textContent = "Click a highlighted adjacent node to move.";
+  } else $("center-info").textContent = "AI turn...";
+}
+
+function renderLog() {
+  const lg = $("log");
+  lg.innerHTML = "";
+  const start = Math.max(0, UI.state.log.length - 200);
+  for (let i = start; i < UI.state.log.length; i++) {
+    const e = UI.state.log[i];
+    lg.appendChild(el("div", { class: "entry " + e.cls }, `[T${e.turn}] ${e.msg}`));
+  }
+  lg.scrollTop = lg.scrollHeight;
+}
+
+function renderAll() {
+  renderMap();
+  renderDashboards();
+  renderLog();
+}
+
+// ============================================================
+// HUMAN ACTIONS
+// ============================================================
+function humanMove(toId) {
+  if (UI.state.finished) return;
+  if (UI.state.activePlayer !== UI.humanIdx) return;
+  applyAction(UI.state, UI.humanIdx, { type: "move", to: toId });
+  renderAll();
+  if (!UI.state.finished) postHumanTurn();
+}
+
+function postHumanTurn() {
+  UI.state.activePlayer = 1 - UI.humanIdx;
+  scheduleAiTurn();
+}
+
+function scheduleAiTurn() {
+  if (UI.state.finished) return;
+  if (UI.state.activePlayer === UI.humanIdx) return;
+  if (UI.pendingAi) return;
+  UI.pendingAi = true;
+  setTimeout(() => {
+    UI.pendingAi = false;
+    if (UI.state.finished) return;
+    runTurn(UI.state, UI.state.activePlayer);
+    UI.state.activePlayer = 1 - UI.state.activePlayer;
+    renderAll();
+  }, 350);
+}
+
+$("btn-retry").addEventListener("click", () => {
+  if (UI.state.finished) return;
+  if (UI.state.activePlayer !== UI.humanIdx) return;
+  applyAction(UI.state, UI.humanIdx, { type: "retry" });
+  renderAll();
+  if (!UI.state.finished) postHumanTurn();
+});
+$("btn-close").addEventListener("click", () => {
+  if (UI.state.finished) return;
+  if (UI.state.activePlayer !== UI.humanIdx) return;
+  const p = UI.state.players[UI.humanIdx];
+  const node = UI.state.graph.nodes[p.pos];
+  const raid = node.id === "P2";
+  applyAction(UI.state, UI.humanIdx, { type: "close", raid });
+  renderAll();
+  if (!UI.state.finished) postHumanTurn();
+});
+$("btn-newgame").addEventListener("click", () => startNewGame());
+
+function startNewGame() {
+  UI.state = newGame(UI.config, 0);
+  UI.state.turn = 0;
+  log(UI.state, "New game started.", "sys");
+  renderAll();
+}
+
+// ============================================================
+// BATCH UI
+// ============================================================
+function summarize(results, totalGames) {
+  const winsByType = { cells: 0, raid: 0, count: 0, draw: 0, loop: 0 };
+  const winsByPlayer = [0, 0, 0];
+  let totalTurns = 0;
+  const turnsHist = {};
+  let cellsStolen = 0, held3p1 = 0, held3p2 = 0;
+  let totalScoreP1 = 0, totalScoreP2 = 0;
+  let totalPowerP1 = 0, totalPowerP2 = 0;
+  let raidAttempts = 0, loops = 0;
+  for (const r of results) {
+    winsByType[r.winType] = (winsByType[r.winType] || 0) + 1;
+    if (r.winner === null) winsByPlayer[2] += 1;
+    else winsByPlayer[r.winner] += 1;
+    totalTurns += r.turns;
+    const bucket = Math.floor(r.turns / 10) * 10;
+    turnsHist[bucket] = (turnsHist[bucket] || 0) + 1;
+    cellsStolen += r.cellsStolenByPvp;
+    if (r.held3cellsEver[0]) held3p1 += 1;
+    if (r.held3cellsEver[1]) held3p2 += 1;
+    totalScoreP1 += r.scores[0];
+    totalScoreP2 += r.scores[1];
+    totalPowerP1 += r.powers[0];
+    totalPowerP2 += r.powers[1];
+    raidAttempts += r.raidsByPlayer[0] + r.raidsByPlayer[1];
+    if (r.looped) loops += 1;
+  }
+  const n = results.length;
+  function pct(x) { return ((x / n) * 100).toFixed(1) + "%"; }
+  let out = "";
+  out += `Games: ${n} / requested ${totalGames}\n\n`;
+  out += `Win share by VICTORY TYPE:\n`;
+  for (const k of ["cells", "raid", "count", "draw", "loop"]) {
+    out += `  ${k.padEnd(6)} ${String(winsByType[k] || 0).padStart(5)} (${pct(winsByType[k] || 0)})\n`;
+  }
+  out += `\nWin share by PLAYER:\n`;
+  out += `  P1   ${String(winsByPlayer[0]).padStart(5)} (${pct(winsByPlayer[0])})\n`;
+  out += `  P2   ${String(winsByPlayer[1]).padStart(5)} (${pct(winsByPlayer[1])})\n`;
+  out += `  Draw ${String(winsByPlayer[2]).padStart(5)} (${pct(winsByPlayer[2])})\n`;
+  out += `\nGame length: avg ${(totalTurns/n).toFixed(1)} turns\n`;
+  out += `Turn-bucket distribution:\n`;
+  const buckets = Object.keys(turnsHist).map(Number).sort((a,b)=>a-b);
+  const maxCount = Math.max.apply(null, buckets.map(b => turnsHist[b]));
+  for (const b of buckets) {
+    const c = turnsHist[b];
+    const barLen = Math.max(1, Math.round(40 * c / maxCount));
+    out += `  [${String(b).padStart(3)}+] ${"#".repeat(barLen).padEnd(40)} ${c}\n`;
+  }
+  out += `\nCell-race ATTEMPTS (any player ever held 3 cells): P1=${held3p1} P2=${held3p2}\n`;
+  out += `Cells stolen via PvP collapse: ${cellsStolen} (avg ${(cellsStolen/n).toFixed(2)}/game)\n`;
+  out += `Raid attempts total: ${raidAttempts} (avg ${(raidAttempts/n).toFixed(2)}/game)\n`;
+  out += `Avg final banked score:  P1=${(totalScoreP1/n).toFixed(2)}  P2=${(totalScoreP2/n).toFixed(2)}\n`;
+  out += `Avg final POWER:         P1=${(totalPowerP1/n).toFixed(2)}  P2=${(totalPowerP2/n).toFixed(2)}\n`;
+  out += `Loop / non-terminating (flagged): ${loops}\n`;
+  return out;
+}
+
+let batchAborted = false;
+$("btn-stop-batch").addEventListener("click", () => { batchAborted = true; });
+$("btn-run-batch").addEventListener("click", async () => {
+  const n = Number($("batch-n").value) || 1000;
+  const baseSeed = Number($("batch-seed").value) || 0;
+  $("btn-run-batch").disabled = true;
+  $("btn-stop-batch").disabled = false;
+  $("batch-output").textContent = "Running...";
+  $("batch-status").textContent = "Running...";
+  batchAborted = false;
+  const results = [];
+  const startTime = performance.now();
+  const chunk = Math.max(50, Math.floor(n / 100));
+  let i = 0;
+  while (i < n) {
+    const end = Math.min(n, i + chunk);
+    for (; i < end; i++) {
+      const seed = baseSeed ? (baseSeed + i) : 0;
+      results.push(simulateOne(UI.config, seed));
+    }
+    $("batch-progress").style.width = (100 * i / n).toFixed(1) + "%";
+    $("batch-status").textContent = `${i} / ${n} (${((performance.now()-startTime)/1000).toFixed(1)}s)`;
+    if (batchAborted) break;
+    await new Promise(r => setTimeout(r, 0));
+  }
+  const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+  const summary = summarize(results, n) + `\nWall time: ${elapsed}s\n`;
+  $("batch-output").textContent = summary;
+  $("batch-status").textContent = `Done. ${results.length} games in ${elapsed}s.`;
+  $("btn-run-batch").disabled = false;
+  $("btn-stop-batch").disabled = true;
+});
+
+// ============================================================
+// INIT
+// ============================================================
+renderConfig();
+startNewGame();
+</script>
+</body>
 </html>
