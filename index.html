@@ -1341,7 +1341,7 @@ function renderMap() {
   const p2 = UI.state.players[1];
   const isHumanTurn = UI.state.activePlayer === UI.humanIdx && !UI.state.finished;
   const reachable = new Set();
-  if (isHumanTurn && !p1.collapsed && !UI.state.awaitingRetry[0]) {
+  if (isHumanTurn && !p1.collapsed) {
     for (const n of UI.state.graph.adj[p1.pos]) {
       if (canMove(UI.state, UI.humanIdx, n)) reachable.add(n);
     }
