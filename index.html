@@ -96,15 +96,16 @@
   .node.center.empty { border-style: dashed; }
   .node.junction { border-color: #58a6ff44; }
   .node .badges {
-    position: absolute; top: -7px; right: -7px;
-    display: flex; flex-direction: column; gap: 1px;
+    position: absolute; top: -9px; right: -10px;
+    display: flex; flex-direction: column; gap: 2px;
+    align-items: flex-end;
   }
   .node .badge {
     background: var(--bg); border: 1px solid var(--line);
-    border-radius: 8px; padding: 0 4px; font-size: 9px;
-    color: var(--text);
+    border-radius: 9px; padding: 1px 5px; font-size: 11px;
+    color: var(--text); line-height: 1.1; white-space: nowrap;
   }
-  .node .badge.mob { color: var(--bad); border-color: var(--bad); }
+  .node .badge.mob { color: var(--bad); border-color: var(--bad); font-weight: bold; }
   .node .mecha {
     position: absolute; bottom: -4px;
     width: 12px; height: 12px; border-radius: 2px;
@@ -197,7 +198,7 @@
         <span><span class="dot" style="background:var(--green)"></span>Cell A</span>
         <span><span class="dot" style="background:var(--yellow)"></span>Cell B</span>
         <span><span class="dot" style="background:#6cb6ff"></span>Cell C</span>
-        <span>M=mod, d#=ammo, S#=scrap, +=sustain, !T#=mob</span>
+        <span>&#x1F527; mod &middot; &#x1F3AF; ammo &middot; &#x1F529; scrap &middot; &#x26FD;/&#x2764; sustain &middot; &#x1F47E; mob</span>
       </div>
     </div>
     <div class="sidebar">
@@ -1369,13 +1370,14 @@ function renderMap() {
     }
     const badges = el("div", { class: "badges" });
     if (n.contents) {
-      const lab = n.contents.kind === "mod" ? "M"
-        : n.contents.kind === "ammo" ? n.contents.dieType
-        : n.contents.kind === "scrap" ? ("S" + n.contents.material)
-        : "+";
+      let lab = "";
+      if (n.contents.kind === "mod") lab = "\u{1F527} +" + n.contents.power;
+      else if (n.contents.kind === "ammo") lab = "\u{1F3AF} " + n.contents.dieType;
+      else if (n.contents.kind === "scrap") lab = "\u{1F529} m" + n.contents.material;
+      else if (n.contents.kind === "sustain") lab = n.contents.benefit === "fuel" ? "\u{26FD}" : "\u{2764}";
       badges.appendChild(el("div", { class: "badge" }, lab));
     }
-    if (n.mob) badges.appendChild(el("div", { class: "badge mob" }, "!T" + n.mob.threat));
+    if (n.mob) badges.appendChild(el("div", { class: "badge mob" }, "\u{1F47E} T" + n.mob.threat));
     if (n.droppedHaul) {
       const c = (n.droppedHaul.mods.length || 0) + (n.droppedHaul.ammo.length || 0) + (n.droppedHaul.scrap.length || 0);
       if (c > 0) badges.appendChild(el("div", { class: "badge" }, "drop:" + c));
