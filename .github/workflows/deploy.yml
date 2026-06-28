@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - claude/3d-booth-configurator-c025B
+      - claude/mac-video-frame-extractor-tmqvjs
       - main
   workflow_dispatch:
 
