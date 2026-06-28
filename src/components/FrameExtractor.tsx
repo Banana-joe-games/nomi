@@ -183,18 +183,131 @@ export function FrameExtractor() {
     setError('');
     setExtracting(true);
     setProgress({ done: 0, total: times.length });
-    v.pause();
+
+    const grab = async (time: number) => {
+      const res = await drawCurrentFrame(time);
+      if (res) addFrame(res.blob, time, frameId.current + 1);
+    };
+
+    // iOS Safari returns the same (initial) frame when grabbing after a
+    // programmatic seek on a paused video. Playing the video muted and
+    // capturing frames as they are actually presented (via
+    // requestVideoFrameCallback) is reliable across browsers including mobile.
+    const supportsRVFC =
+      typeof HTMLVideoElement !== 'undefined' &&
+      'requestVideoFrameCallback' in HTMLVideoElement.prototype;
 
     try {
-      for (let i = 0; i < times.length; i++) {
-        await seekTo(v, times[i]);
-        const res = await drawCurrentFrame(times[i]);
-        if (res) addFrame(res.blob, times[i], frameId.current + 1);
-        setProgress({ done: i + 1, total: times.length });
+      if (supportsRVFC) {
+        await new Promise<void>((resolve, reject) => {
+          // Non-null, typed local so the nested callbacks keep the narrowing
+          // and can call requestVideoFrameCallback.
+          const vid = v as HTMLVideoElement & {
+            requestVideoFrameCallback: (
+              cb: (now: number, meta?: { mediaTime: number }) => void
+            ) => void;
+          };
+          let idx = 0;
+          let finished = false;
+          const spacing =
+            times.length > 1
+              ? (times[times.length - 1] - times[0]) / (times.length - 1)
+              : 0.5;
+          // Faster than realtime, but slow enough that presented frames stay
+          // finer than the requested spacing (so no targets get skipped).
+          const rate = Math.min(4, Math.max(1, spacing * 6));
+          vid.muted = true;
+
+          // `busy` serializes captures: drawing shares one canvas, and the
+          // target index is claimed synchronously so a frame can never be
+          // captured twice (e.g. by onFrame and onEnded racing at the end).
+          let busy = false;
+
+          const pump = () => {
+            if (finished) return;
+            vid.requestVideoFrameCallback(onFrame);
+          };
+
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            vid.removeEventListener('ended', onEnded);
+            vid.pause();
+            resolve();
+          };
+
+          function onFrame(_now: number, meta?: { mediaTime: number }) {
+            if (finished || busy) return;
+            if (idx >= times.length) {
+              finish();
+              return;
+            }
+            const t = meta ? meta.mediaTime : vid.currentTime;
+            if (t + 1e-3 < times[idx]) {
+              pump();
+              return;
+            }
+            busy = true;
+            const myIdx = idx;
+            idx += 1;
+            grab(times[myIdx]).then(() => {
+              busy = false;
+              setProgress({ done: idx, total: times.length });
+              if (idx >= times.length) finish();
+              else pump();
+            });
+          }
+
+          // The video can end before a presented frame reaches the last
+          // targets (e.g. when they sit at the very end): grab whatever
+          // remains from the final frame.
+          function onEnded() {
+            (async () => {
+              while (busy) await new Promise((r) => setTimeout(r, 10));
+              while (!finished && idx < times.length) {
+                busy = true;
+                const myIdx = idx;
+                idx += 1;
+                await grab(times[myIdx]);
+                busy = false;
+                setProgress({ done: idx, total: times.length });
+              }
+              finish();
+            })();
+          }
+
+          const begin = () => {
+            vid.playbackRate = rate;
+            vid.requestVideoFrameCallback(onFrame);
+            vid.addEventListener('ended', onEnded, { once: true });
+            vid.play().catch(reject);
+          };
+
+          const startAt = Math.max(0, times[0] - 0.05);
+          if (Math.abs(vid.currentTime - startAt) > 0.05) {
+            const onSeeked = () => {
+              vid.removeEventListener('seeked', onSeeked);
+              begin();
+            };
+            vid.addEventListener('seeked', onSeeked);
+            vid.currentTime = startAt;
+          } else {
+            begin();
+          }
+        });
+      } else {
+        v.pause();
+        for (let i = 0; i < times.length; i++) {
+          await seekTo(v, times[i]);
+          await grab(times[i]);
+          setProgress({ done: i + 1, total: times.length });
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore durante l’estrazione.');
     } finally {
+      v.playbackRate = 1;
+      v.pause();
       setExtracting(false);
     }
   }, [videoUrl, computeTimes, drawCurrentFrame, addFrame]);
@@ -289,6 +402,7 @@ export function FrameExtractor() {
                   ref={videoRef}
                   src={videoUrl}
                   controls
+                  playsInline
                   preload="auto"
                   onLoadedMetadata={onVideoLoaded}
                   className="w-full max-h-[55vh] mx-auto"
